@@ -1,10 +1,5 @@
-// Global variables for cooldown
-let lastPinchTime = 0;
-const PINCH_COOLDOWN = 1000;
-
 // Global variables for humans and icons
-let icons
-= [];
+let icons = [];
 let human;
 let totalCaffeine = 0;
 let caffeineLimit = 400;
@@ -19,12 +14,19 @@ let predictions = [];
 let pinchActive = false;
 
 // Threshold (in pixels) for detecting a pinch gesture.
-const PINCH_THRESHOLD = 40;
+const BASE_PINCH_THRESHOLD = 40;
 
 // Global variables for storing text position and pinch distance.
 let pinchDistance = undefined;
 let textPosX = 0;
 let textPosY = 0;
+
+// Scaling factor for pinch threshold (adjust as needed)
+let pinchScaleFactor = 1;
+
+// Global variables for cooldown
+let lastPinchTime = 0;
+const PINCH_COOLDOWN = 1000;
 
 // Image variables for caffeine icons
 let coffeeImg;
@@ -67,22 +69,51 @@ function preload() {
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
   video.size(windowWidth, windowHeight);
+
+  // Update pinch scale factor based on window size (example)
+  pinchScaleFactor = min(windowWidth / 640, windowHeight / 480); // Adjust base dimensions as needed
 }
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
 
+  // Update pinch scale factor based on window size (example)
+  pinchScaleFactor = min(windowWidth / 640, windowHeight / 480); // Adjust base dimensions as needed
+
   ///// human and icons setup /////
   human = new Human(width / 2, height / 2); // Place the human in the center
 
+  // Define the x position for the icons (1/4 of the screen width)
+  let iconX1 = width / 4;
+  let iconX2 = (width * 3) / 4;
+
+  // Initial Y position
+  let initialY = 30;
+  // Spacing between icons
+  let verticalSpacing = 140; // Adjust this value to change the spacing
+
   // Caffeine icons
-  icons.push(new CaffeineIcon("Green Tea", 20, 100, 50, greenTeaImg));
-  icons.push(new CaffeineIcon("Energy Drink", 80, 100, 150, energyDrinkImg));
-  icons.push(new CaffeineIcon("Bubble Tea", 60, 100, 250, bubbleTeaImg));
-  icons.push(new CaffeineIcon("Coke", 40, 100, 350, cokeImg));
-  icons.push(new CaffeineIcon("Coffee", 95, 100, 450, coffeeImg));
+  icons.push(new CaffeineIcon("Green Tea", 20, iconX1, initialY, greenTeaImg));
   icons.push(
-    new CaffeineIcon("Dark Chocolate Bar", 23, 100, 550, darkChocolateImg)
+    new CaffeineIcon("Energy Drink", 80, iconX2, initialY + initialY, energyDrinkImg)
+  );
+  icons.push(
+    new CaffeineIcon("Bubble Tea", 60, iconX1, initialY + verticalSpacing * 2, bubbleTeaImg)
+  );
+  icons.push(
+    new CaffeineIcon("Coke", 40, iconX2, initialY + verticalSpacing * 2, cokeImg)
+  );
+  icons.push(
+    new CaffeineIcon("Coffee", 95, iconX1, initialY + verticalSpacing * 4, coffeeImg)
+  );
+  icons.push(
+    new CaffeineIcon(
+      "Dark Chocolate Bar",
+      23,
+      iconX2,
+      initialY + verticalSpacing * 4,
+      darkChocolateImg
+    )
   );
 
   ///// VIDEO SETUP /////
@@ -105,6 +136,9 @@ function modelReady() {
 }
 
 function draw() {
+  // Calculate scaled pinch threshold
+  let scaledPinchThreshold = BASE_PINCH_THRESHOLD * pinchScaleFactor;
+
   // Draw everything in a mirrored coordinate system.
   push();
   // Mirror horizontally.
@@ -154,7 +188,7 @@ function draw() {
     textPosY = midY;
 
     // Check if a pinch gesture is detected
-    if (pinchDistance < PINCH_THRESHOLD) {
+    if (pinchDistance < scaledPinchThreshold) {
       // Check if enough time has passed since the last pinch
       if (millis() - lastPinchTime > PINCH_COOLDOWN) {
         checkIconInteraction(textPosX, textPosY);
@@ -190,6 +224,8 @@ class Human {
     this.x = x;
     this.y = y;
     this.caffeineLevel = 0; // Caffeine percentage (0-150)
+    this.imageWidth = 300; // Desired width of the image
+    this.imageHeight = 400; // Desired height of the image
   }
 
   update() {
@@ -209,16 +245,20 @@ class Human {
     } else if (this.caffeineLevel >= 150) {
       imgIndex = 150;
     } else {
-      imgIndex = Math.floor(this.caffeineLevel / 10) * 10; // Round down to nearest 10
+      imgIndex = Math.floor(this.caffeineLevel / 10) * 10; // Ro
     }
+
+    let currentImage = humanImages[imgIndex];
+    let aspectRatio = currentImage.width / currentImage.height;
+    let scaledWidth = this.imageHeight * aspectRatio;
 
     // Display the corresponding human image
     image(
       humanImages[imgIndex],
-      -150,
-      -200,
-      300,
-      400
+      -scaledWidth / 2,
+      -this.imageHeight / 2,
+      scaledWidth,
+      this.imageHeight
     ); // Adjust position and size as needed
 
     pop(); // Restore the previous drawing state
@@ -246,17 +286,21 @@ class CaffeineIcon {
     this.x = x;
     this.y = y;
     this.img = img; // Store the image
+    this.originalWidth = img.width; // Store original width
+    this.originalHeight = img.height; // Store original height
+    this.scaledWidth = 150; // Fixed width for the icon
+    this.scaledHeight = (this.scaledWidth / this.originalWidth) * this.originalHeight;
   }
 
   display() {
     // Draw the image instead of the rectangle and text
     if (this.img) {
-      image(this.img, this.x, this.y, 150, 75); // Draw the image
+      image(this.img, this.x, this.y, this.scaledWidth, this.scaledHeight); // Draw the image with scaled dimensions
     } else {
       // Fallback in case the image is not loaded
       fill(200);
       stroke(0);
-      rect(this.x, this.y, 100, 50);
+      rect(this.x, this.y, this.scaledWidth, this.scaledHeight);
       fill(0);
       text(this.name, this.x + 10, this.y + 25);
     }
@@ -274,9 +318,9 @@ function checkIconInteraction(pinchedX, pinchedY) {
   for (let icon of icons) {
     if (
       pinchedX > icon.x &&
-      pinchedX < icon.x + 100 &&
+      pinchedX < icon.x + icon.scaledWidth &&
       pinchedY > icon.y &&
-      pinchedY < icon.y + 50
+      pinchedY < icon.y + icon.scaledHeight
     ) {
       totalCaffeine += icon.caffeineAmount; // Add caffeine amount from the icon
       totalCaffeine = constrain(totalCaffeine, 0, caffeineLimit); // Prevent exceeding limit
